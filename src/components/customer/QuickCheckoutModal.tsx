@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
-import { createOrder, getMyAddresses, Address, CreateOrderData } from '../../services/customer-web.service';
+import {
+  createOrder,
+  createGuestOrder,
+  getMyAddresses,
+  Address,
+  CreateOrderData,
+  CreateGuestOrderData,
+} from '../../services/customer-web.service';
 import { OrderSuccessModal } from './OrderSuccessModal';
 import { getSettings } from '../../services/settings.service';
+import { apiRequest } from '../../config/api';
 import { logger } from '../../utils/logger';
 
 interface QuickCheckoutModalProps {
@@ -47,6 +55,7 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
   const { customer, isAuthenticated, refreshProfile } = useCustomerAuth();
   const activeCart = cart || cartItems || [];
 
+  const [customerName, setCustomerName] = useState<string>('');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [newArea, setNewArea] = useState<string>('Law Gate');
@@ -57,7 +66,10 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
   const [contactPhone, setContactPhone] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [duplicateWarning, setDuplicateWarning] = useState<{ message: string; previousOrderNumber?: string } | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    message: string;
+    previousOrderNumber?: string;
+  } | null>(null);
   const [confirmedSuccessOrder, setConfirmedSuccessOrder] = useState<any | null>(null);
 
   const subtotal = activeCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -66,55 +78,57 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    if (!isAuthenticated) {
-      onClose();
-      navigate('/customer/login', {
-        state: { from: { pathname: '/customer/menu' } },
-      });
-      return;
-    }
-
     const loadData = async () => {
       try {
-        const [setts, addrs] = await Promise.all([
-          getSettings(),
-          getMyAddresses().catch(() => [] as Address[]),
-        ]);
-
-        if (setts?.delivery?.fee) {
-          setDeliveryFee(setts.delivery.fee);
+        const setts = await getSettings().catch(() => null);
+        if (setts?.delivery?.fee || setts?.deliveryCharge) {
+          setDeliveryFee(setts?.delivery?.fee || setts?.deliveryCharge || 0);
         }
 
-        if (addrs && addrs.length > 0) {
-          setAddresses(addrs);
-          const defaultAddr = addrs.find((a) => a.isDefault) || addrs[0];
-          setSelectedAddressId(defaultAddr._id);
-          setIsAddingNewAddress(false);
-        } else {
-          setIsAddingNewAddress(true);
-        }
-
-        // Auto-fill contact phone from customer profile if available
-        let userPhone = typeof customer?.phone === 'string' ? customer.phone : customer?.phone?.number;
-        if (!userPhone || userPhone.startsWith('deleted_')) {
-          try {
-            const meRes = await apiRequest('/auth/customer/me');
-            const meData = await meRes.json();
-            if (meData?.data?.user?.phone) {
-              const fetchedPhone = typeof meData.data.user.phone === 'string'
-                ? meData.data.user.phone
-                : meData.data.user.phone.number;
-              if (fetchedPhone && !fetchedPhone.startsWith('deleted_')) {
-                userPhone = fetchedPhone;
-              }
-            }
-          } catch (e) {
-            // ignore network err
+        if (isAuthenticated) {
+          const addrs = await getMyAddresses().catch(() => [] as Address[]);
+          if (addrs && addrs.length > 0) {
+            setAddresses(addrs);
+            const defaultAddr = addrs.find((a) => a.isDefault) || addrs[0];
+            setSelectedAddressId(defaultAddr._id);
+            setIsAddingNewAddress(false);
+          } else {
+            setIsAddingNewAddress(true);
           }
-        }
 
-        if (userPhone && !userPhone.startsWith('deleted_')) {
-          setContactPhone(userPhone.replace(/[^\d]/g, ''));
+          if (customer?.name) {
+            setCustomerName(customer.name);
+          }
+
+          // Auto-fill contact phone from customer profile if available
+          let userPhone = typeof customer?.phone === 'string' ? customer.phone : customer?.phone?.number;
+          if (!userPhone || userPhone.startsWith('deleted_')) {
+            try {
+              const meRes = await apiRequest('/auth/customer/me');
+              const meData = await meRes.json();
+              if (meData?.data?.user?.phone) {
+                const fetchedPhone =
+                  typeof meData.data.user.phone === 'string'
+                    ? meData.data.user.phone
+                    : meData.data.user.phone.number;
+                if (fetchedPhone && !fetchedPhone.startsWith('deleted_')) {
+                  userPhone = fetchedPhone;
+                }
+              }
+              if (meData?.data?.user?.name && !customerName) {
+                setCustomerName(meData.data.user.name);
+              }
+            } catch (e) {
+              // ignore network err
+            }
+          }
+
+          if (userPhone && !userPhone.startsWith('deleted_')) {
+            setContactPhone(userPhone.replace(/[^\d]/g, ''));
+          }
+        } else {
+          // Guest checkout: default to adding new address and blank name
+          setIsAddingNewAddress(true);
         }
       } catch (err) {
         logger.warn('Could not load checkout data', { err });
@@ -122,7 +136,7 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
     };
 
     loadData();
-  }, [isOpen, isAuthenticated, customer, navigate, onClose]);
+  }, [isOpen, isAuthenticated, customer]);
 
   if (!isOpen) return null;
 
@@ -130,13 +144,19 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
     setError(null);
     setDuplicateWarning(null);
 
+    const trimmedName = (customerName || customer?.name || '').trim();
+    if (!isAuthenticated && !trimmedName) {
+      setError('Please provide your name so we know who to deliver to.');
+      return;
+    }
+
     const cleanContact = contactPhone.replace(/[^\d]/g, '');
     if (!cleanContact || !/^[6-9]\d{9}$/.test(cleanContact)) {
       setError('Please provide a valid 10-digit mobile number for delivery contact.');
       return;
     }
 
-    let finalAddress;
+    let finalAddress: { area: string; addressLine: string; landmark?: string };
     if (isAddingNewAddress) {
       if (!newAddressLine.trim()) {
         setError('Please enter your specific room / flat / hostel address.');
@@ -162,41 +182,70 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
 
     setSubmitting(true);
     try {
-      const orderPayload: CreateOrderData = {
-        items: activeCart.map((i) => ({
-          menuItem: i.menuItemId,
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price,
-          portion: i.selectedVariant,
-          subtotal: i.price * i.quantity,
-        })),
-        deliveryAddress: finalAddress as any,
-        paymentMethod: 'COD',
-        contactPhone: cleanContact,
-        totalAmount: total,
-        deliveryFee,
-        allowDuplicate,
-      };
+      let order: any;
 
-      const order = await createOrder(orderPayload);
+      if (!isAuthenticated) {
+        // Guest order flow - no account or login needed
+        const guestPayload: CreateGuestOrderData = {
+          customer: {
+            name: trimmedName,
+            phone: cleanContact,
+            email: customer?.email || undefined,
+          },
+          items: activeCart.map((i) => ({
+            menuItem: i.menuItemId,
+            name: i.name,
+            quantity: i.quantity,
+            price: i.price,
+            portion: i.selectedVariant || 'Full',
+            subtotal: i.price * i.quantity,
+          })),
+          orderType: 'DELIVERY',
+          deliveryAddress: finalAddress,
+          paymentMethod: 'COD',
+          allowDuplicate,
+        };
+
+        order = await createGuestOrder(guestPayload);
+      } else {
+        // Authenticated customer order flow
+        const orderPayload: CreateOrderData = {
+          items: activeCart.map((i) => ({
+            menuItem: i.menuItemId,
+            name: i.name,
+            quantity: i.quantity,
+            price: i.price,
+            portion: i.selectedVariant,
+            subtotal: i.price * i.quantity,
+          })),
+          deliveryAddress: finalAddress as any,
+          paymentMethod: 'COD',
+          contactPhone: cleanContact,
+          totalAmount: total,
+          deliveryFee,
+          allowDuplicate,
+        };
+
+        order = await createOrder(orderPayload);
+      }
 
       // Clear Cart
       localStorage.removeItem('cart');
       window.dispatchEvent(new Event('cartUpdated'));
 
-      // If customer did not previously have a phone in profile, refresh their profile
-      // to immediately reflect the phone that was auto-linked during order creation
-      const currentPhone = typeof customer?.phone === 'string' ? customer.phone : customer?.phone?.number;
-      if (!currentPhone || currentPhone.startsWith('deleted_')) {
-        try {
-          await refreshProfile();
-        } catch (e) {
-          // Non-blocking
+      if (isAuthenticated) {
+        const currentPhone =
+          typeof customer?.phone === 'string' ? customer.phone : customer?.phone?.number;
+        if (!currentPhone || currentPhone.startsWith('deleted_')) {
+          try {
+            await refreshProfile();
+          } catch (e) {
+            // Non-blocking
+          }
         }
       }
 
-      // Show clear order confirmation modal with items, delivery info and buttons
+      // Show clear order confirmation modal
       setConfirmedSuccessOrder(order);
     } catch (err: any) {
       if (err?.isDuplicateWarning) {
@@ -234,10 +283,17 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-neutral-100 dark:border-neutral-800">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
-              1-CLICK CHECKOUT
-            </span>
-            <h3 className="text-xl font-extrabold text-neutral-950 dark:text-white">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                1-CLICK CHECKOUT
+              </span>
+              {!isAuthenticated && (
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  Guest Checkout
+                </span>
+              )}
+            </div>
+            <h3 className="text-xl font-extrabold text-neutral-950 dark:text-white mt-0.5">
               Complete Your Order
             </h3>
           </div>
@@ -249,6 +305,21 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
           </button>
         </div>
 
+        {!isAuthenticated && (
+          <div className="mt-3 p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/60 flex items-center justify-between text-xs">
+            <span className="text-neutral-600 dark:text-neutral-400">
+              No account required! Order in seconds.
+            </span>
+            <Link
+              to="/customer/login"
+              state={{ from: { pathname: '/customer/cart' } }}
+              className="font-bold text-burgundy hover:underline shrink-0 ml-2"
+            >
+              Sign in
+            </Link>
+          </div>
+        )}
+
         {error && (
           <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs rounded-xl font-medium">
             {error}
@@ -258,13 +329,14 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
         {/* Order Items Summary */}
         <div className="py-4 border-b border-neutral-100 dark:border-neutral-800">
           <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">
-            Items ({cart.length})
+            Items ({activeCart.length})
           </p>
           <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-            {cart.map((item, idx) => (
+            {activeCart.map((item, idx) => (
               <div key={idx} className="flex justify-between items-center text-sm">
                 <span className="text-neutral-800 dark:text-neutral-200 font-medium">
-                  {item.quantity}x {item.name} <span className="text-xs text-neutral-400">({item.selectedVariant})</span>
+                  {item.quantity}x {item.name}{' '}
+                  <span className="text-xs text-neutral-400">({item.selectedVariant})</span>
                 </span>
                 <span className="font-bold text-neutral-900 dark:text-white">
                   ₹{item.price * item.quantity}
@@ -273,6 +345,23 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Customer Name (For Guest or when not in profile) */}
+        {(!isAuthenticated || !customer?.name) && (
+          <div className="py-4 border-b border-neutral-100 dark:border-neutral-800">
+            <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">
+              Your Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Enter your full name"
+              className="w-full px-4 py-2.5 text-xs rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white outline-none focus:border-black dark:focus:border-white transition-colors"
+            />
+          </div>
+        )}
 
         {/* Contact Phone Number */}
         <div className="py-4 border-b border-neutral-100 dark:border-neutral-800">
@@ -301,7 +390,7 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
             <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">
               Delivery Destination
             </label>
-            {addresses.length > 0 && (
+            {isAuthenticated && addresses.length > 0 && (
               <button
                 type="button"
                 onClick={() => setIsAddingNewAddress(!isAddingNewAddress)}
@@ -362,13 +451,26 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-neutral-500 mb-1">
-                  Hostel / Building / Room Details
+                  Hostel / Building / Room Details <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   placeholder="e.g. Block B, Room 402, Royal Girls Hostel"
                   value={newAddressLine}
                   onChange={(e) => setNewAddressLine(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 outline-none focus:border-black"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-500 mb-1">
+                  Landmark (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Near Main Gate"
+                  value={newLandmark}
+                  onChange={(e) => setNewLandmark(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-xs text-neutral-900 dark:text-white placeholder-neutral-400 outline-none focus:border-black"
                 />
               </div>
@@ -396,8 +498,12 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
               <div className="flex items-start gap-2">
                 <span className="text-base">⚠️</span>
                 <div>
-                  <p className="font-extrabold text-sm text-amber-950 dark:text-amber-100">Duplicate Order Notice</p>
-                  <p className="mt-0.5 text-neutral-600 dark:text-neutral-300">{duplicateWarning.message}</p>
+                  <p className="font-extrabold text-sm text-amber-950 dark:text-amber-100">
+                    Duplicate Order Notice
+                  </p>
+                  <p className="mt-0.5 text-neutral-600 dark:text-neutral-300">
+                    {duplicateWarning.message}
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
@@ -407,15 +513,23 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
                   onClick={() => handlePlaceOrderInstant(true)}
                   className="flex-1 py-2.5 rounded-xl bg-burgundy text-white font-bold text-xs hover:bg-burgundy-600 transition-all shadow-xs"
                 >
-                  {submitting ? "Placing..." : "Yes, Place Order Again"}
+                  {submitting ? 'Placing...' : 'Yes, Place Order Again'}
                 </button>
                 <button
                   type="button"
                   disabled={submitting}
-                  onClick={() => { setDuplicateWarning(null); onClose(); navigate("/customer/orders"); }}
+                  onClick={() => {
+                    setDuplicateWarning(null);
+                    onClose();
+                    if (isAuthenticated) {
+                      navigate('/customer/orders');
+                    } else {
+                      navigate('/customer/menu');
+                    }
+                  }}
                   className="flex-1 py-2.5 rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 font-bold text-xs text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 transition-all"
                 >
-                  View My Order
+                  {isAuthenticated ? 'View My Orders' : 'Back to Menu'}
                 </button>
               </div>
             </div>
@@ -438,4 +552,5 @@ export const QuickCheckoutModal: React.FC<QuickCheckoutModalProps> = ({
     </div>
   );
 };
+
 export default QuickCheckoutModal;

@@ -88,7 +88,7 @@ export function clearAuthScope(): void {
 export async function forceLogout(reason: string = 'mixed_session'): Promise<void> {
   try {
     // Try to call logout endpoint to clean backend
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:10000/api/v1';
     try {
       // Admin logout attempt
       await fetch(`${apiBase}/auth/admin/logout`, {

@@ -5,11 +5,11 @@
   "packageManager": "pnpm@10.33.0",
   "type": "module",
   "scripts": {
-    "dev": "set NODE_ENV=development && vite",
-    "build": "set NODE_ENV=production && vite build",
-    "build:check": "set NODE_ENV=production && tsc -b && vite build",
+    "dev": "vite",
+    "build": "vite build",
+    "build:check": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "set NODE_ENV=production && vite preview",
+    "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

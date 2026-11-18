@@ -339,8 +339,16 @@ export const getRequestAuthScope = (endpoint: string, pathname: string = window.
     return 'customer';
   }
 
-  // 2. Shared endpoints (e.g. orders/) - use current path context
-  if (normalizedEndpoint.startsWith('orders/')) {
+  // Public/guest order endpoints (no auth scope required)
+  if (
+    normalizedEndpoint.startsWith('orders/guest') ||
+    normalizedEndpoint.startsWith('guest')
+  ) {
+    return null;
+  }
+
+  // 2. Shared endpoints (e.g. orders or orders/...) - use current path context
+  if (normalizedEndpoint === 'orders' || normalizedEndpoint.startsWith('orders/')) {
     if (pathname.startsWith('/admin')) {
       return 'admin';
     }

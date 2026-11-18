@@ -97,7 +97,8 @@ function AppRoutes() {
       {/* Public Routes - No Auth Providers */}
       <Route element={<PublicApp />}>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/order" element={<Navigate to="/customer/menu" replace />} />
+        <Route path="/order" element={<GuestOrder />} />
+        <Route path="/guest-order" element={<GuestOrder />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       </Route>
 
@@ -105,6 +106,8 @@ function AppRoutes() {
       <Route element={<AdminPublicApp />}>
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/admin/login" element={<Navigate to="/signin" replace />} />
+        <Route path="/admin/signin" element={<Navigate to="/signin" replace />} />
       </Route>
 
       {/* Admin App - Admin Auth Provider */}

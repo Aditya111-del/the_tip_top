@@ -203,7 +203,7 @@ const extractUserId = (scope: 'admin' | 'customer' | null): string | null => {
 };
 
 export const getApiUrl = (endpoint: string = ''): string => {
-  const configuredBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const configuredBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:10000';
   const baseUrl = normalizeApiBaseUrl(configuredBaseUrl);
   
   // Remove leading slash from endpoint if present
@@ -347,7 +347,7 @@ export const apiRequest = async (
   const authScope = getRequestAuthScope(endpoint);
   const userId = extractUserId(authScope);
   const isRefreshEndpoint = endpoint.endsWith('/refresh') || endpoint === 'auth/refresh-token';
-  const isPublicEndpoint = endpoint.includes('shop-status') || endpoint.includes('categories') || endpoint.includes('offers');
+  const isPublicEndpoint = endpoint.includes('shop-status') || endpoint.includes('categories') || endpoint.includes('offers') || endpoint.includes('orders/guest');
 
   // TRIGGER REFRESH if token is missing for a protected route (Hydration recovery)
   if (authScope && !getAccessToken(authScope) && !isRefreshEndpoint && !isPublicEndpoint) {

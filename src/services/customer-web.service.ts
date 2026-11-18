@@ -161,6 +161,28 @@ export interface CreateOrderData {
   customerEmail?: string;
 }
 
+export interface CreateGuestOrderData {
+  customer: {
+    name: string;
+    phone: string;
+    email?: string;
+  };
+  items: Array<{
+    menuItem: string;
+    name?: string;
+    portion?: string;
+    price?: number;
+    quantity: number;
+    subtotal?: number;
+  }>;
+  orderType?: 'DELIVERY' | 'PICKUP';
+  deliveryAddress: DeliveryAddress;
+  paymentMethod: string;
+  specialInstructions?: string;
+  fcmToken?: string;
+  allowDuplicate?: boolean;
+}
+
 export interface Order {
   _id: string;
   orderNumber: string;
@@ -442,6 +464,47 @@ export const createOrder = async (orderData: CreateOrderData): Promise<Order> =>
     throw new Error(data.message || 'Failed to create order');
   } catch (error: any) {
     logger.error('Error creating order');
+    throw error;
+  }
+};
+
+/**
+ * Create a guest order (no authentication or account required)
+ */
+export const createGuestOrder = async (orderData: CreateGuestOrderData): Promise<Order> => {
+  try {
+    const response = await apiRequest('/orders/guest/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(orderData),
+    });
+
+    const data = await parseApiResponse(response);
+
+    if (data.status === 'success' && data.data?.order) {
+      return data.data.order;
+    }
+
+    // Handle duplicate order confirmation warning
+    if (data.status === 'duplicate_warning') {
+      const dupErr: any = new Error(data.message);
+      dupErr.isDuplicateWarning = true;
+      dupErr.duplicateData = data.data;
+      throw dupErr;
+    }
+
+    // Handle validation errors with details
+    if (data.errors && Array.isArray(data.errors)) {
+      const errorMessages = data.errors.map((err: any) => err.message || err.msg || JSON.stringify(err)).join(', ');
+      logger.warn('Guest order validation failed');
+      throw new Error(`Validation failed: ${errorMessages}`);
+    }
+
+    throw new Error(data.message || 'Failed to place guest order');
+  } catch (error: any) {
+    logger.error('Error creating guest order', error);
     throw error;
   }
 };

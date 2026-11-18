@@ -31,7 +31,7 @@ export interface AddressData {
 export const updateCustomer = async (data: UpdateCustomerData) => {
   const token = getAccessToken('customer');
   
-  const response = await apiRequest('/auth/me', {
+  const response = await apiRequest('/auth/customer/me', {
     method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${token}`
@@ -98,7 +98,7 @@ export const changePassword = async (data: {
 }) => {
   const token = getAccessToken('customer');
   
-  const response = await apiRequest('/auth/change-password', {
+  const response = await apiRequest('/auth/customer/change-password', {
     method: 'PATCH',
     headers: {
       'Authorization': `Bearer ${token}`

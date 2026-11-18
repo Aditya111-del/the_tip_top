@@ -70,7 +70,7 @@ export function usePaymentOrchestrator() {
         orderType: 'DELIVERY'
       };
 
-      const response = await apiRequest('orders/create', {
+      const response = await apiRequest('orders', {
         method: 'POST',
         body: JSON.stringify(payload)
       });

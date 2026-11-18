@@ -74,7 +74,7 @@ export enum CustomerLogoutReason {
 }
 
 const CUSTOMER_API_BASE = (() => {
-  const configuredBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+  const configuredBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:10000/api/v1';
   const trimmed = configuredBaseUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/api/v1') ? trimmed : `${trimmed}/api/v1`;
 })();

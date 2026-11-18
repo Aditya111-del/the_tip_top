@@ -22,7 +22,7 @@ class SocketCoordinator {
     }
 
     this.isConnecting = true;
-    let serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    let serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:10000';
     
     // If URL contains /api/v1, strip it for socket connection
     if (serverUrl.includes('/api/v1')) {

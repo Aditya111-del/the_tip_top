@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { formatOrderNumberForDisplay } from '../../utils/orderNumber';
 
 interface OrderSuccessModalProps {
@@ -14,6 +15,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   onClose,
 }) => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useCustomerAuth();
   if (!isOpen || !order) return null;
 
   const orderNum = order.orderNumber ? formatOrderNumberForDisplay(order.orderNumber) : '';
@@ -101,21 +103,38 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
 
         {/* Action Buttons */}
         <div className="mt-6 space-y-2.5">
-          <button
-            type="button"
-            onClick={handleTrackOrders}
-            className="w-full py-3.5 px-6 rounded-full bg-burgundy hover:bg-burgundy-600 text-white font-extrabold text-xs sm:text-sm tracking-wide transition-all shadow-md active:scale-98 flex items-center justify-center gap-2"
-          >
-            <span>Track Order in My Orders →</span>
-          </button>
+          {isAuthenticated ? (
+            <>
+              <button
+                type="button"
+                onClick={handleTrackOrders}
+                className="w-full py-3.5 px-6 rounded-full bg-burgundy hover:bg-burgundy-600 text-white font-extrabold text-xs sm:text-sm tracking-wide transition-all shadow-md active:scale-98 flex items-center justify-center gap-2"
+              >
+                <span>Track Order in My Orders →</span>
+              </button>
 
-          <button
-            type="button"
-            onClick={handleBackToMenu}
-            className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
-          >
-            Back to Menu
-          </button>
+              <button
+                type="button"
+                onClick={handleBackToMenu}
+                className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
+              >
+                Back to Menu
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleBackToMenu}
+                className="w-full py-3.5 px-6 rounded-full bg-burgundy hover:bg-burgundy-600 text-white font-extrabold text-xs sm:text-sm tracking-wide transition-all shadow-md active:scale-98 flex items-center justify-center gap-2"
+              >
+                <span>Back to Menu / Order More →</span>
+              </button>
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                Please keep your phone handy. Our delivery team will call you upon arrival.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
