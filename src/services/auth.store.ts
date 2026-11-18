@@ -1,0 +1,67 @@
+import { useSyncExternalStore } from 'react';
+
+export type AuthRole = 'admin' | 'customer' | null;
+
+export type AuthUser = {
+  _id?: string;
+  id?: string;
+  name?: string | { first?: string; last?: string };
+  email?: string | { address?: string; isVerified?: boolean };
+  phone?: string | { number?: string; isVerified?: boolean };
+  role?: string | null;
+  isActive?: boolean;
+};
+
+export type AuthState = {
+  user: AuthUser | null;
+  role: AuthRole;
+  isAuthResolved: boolean;
+  isAppReady: boolean;
+};
+
+type AuthStoreListener = () => void;
+
+const listeners = new Set<AuthStoreListener>();
+
+let state: AuthState = {
+  user: null,
+  role: null,
+  isAuthResolved: false,
+  isAppReady: false,
+};
+
+const emit = () => {
+  listeners.forEach((listener) => listener());
+};
+
+export const authStore = {
+  getState(): AuthState {
+    return state;
+  },
+  setState(next: Partial<AuthState>) {
+    state = {
+      ...state,
+      ...next,
+    };
+    emit();
+  },
+  reset() {
+    state = {
+      user: null,
+      role: null,
+      isAuthResolved: false,
+      isAppReady: false,
+    };
+    emit();
+  },
+  subscribe(listener: AuthStoreListener) {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+};
+
+export const useAuthStore = (): AuthState => {
+  return useSyncExternalStore(authStore.subscribe, authStore.getState, authStore.getState);
+};
